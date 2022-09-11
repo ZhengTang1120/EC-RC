@@ -4,29 +4,11 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 import numpy as np
 
-from pytorch_pretrained_bert.modeling import BertModel, BertOnlyMLMHead, BertPreTrainedModel
+from pytorch_pretrained_bert.modeling import BertModel
 
 from utils import constant, torch_utils
 from torch.nn import CrossEntropyLoss
 
-class BertForMaskedLM(BertPreTrainedModel):
-    def __init__(self, bert):
-        super().__init__(bert.config)
-        self.bert = bert
-        self.cls = BertOnlyMLMHead(bert.config, bert.embeddings.word_embeddings.weight)
-        self.apply(self.init_bert_weights)
-
-    def forward(self, input_ids, token_type_ids=None, attention_mask=None, masked_lm_labels=None):
-        sequence_output, _ = self.bert(input_ids, token_type_ids, attention_mask,
-                                       output_all_encoded_layers=False)
-        prediction_scores = self.cls(sequence_output)
-
-        if masked_lm_labels is not None:
-            loss_fct = CrossEntropyLoss(ignore_index=0)
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.bert.config.vocab_size), masked_lm_labels.view(-1))
-            return masked_lm_loss
-        else:
-            return prediction_scores
 
 class BERTencoder(nn.Module):
     def __init__(self):
@@ -59,15 +41,6 @@ class BERTclassifier(nn.Module):
         subj_mask = torch.logical_and(words.unsqueeze(2).gt(0), words.unsqueeze(2).lt(3))
         obj_mask = torch.logical_and(words.unsqueeze(2).gt(2), words.unsqueeze(2).lt(20))
         tag_mask = tags.unsqueeze(2).eq(1)
-        # for i, x in enumerate(torch.sum(subj_mask, 1)):
-        #     if x[0].item() == 0:
-        #         print ("subj missing", words[i])
-        # for i, x in enumerate(torch.sum(obj_mask, 1)):
-        #     if x[0].item() == 0:
-        #         print ("obj missing", words[i])
-        # for i, x in enumerate(torch.sum(tag_mask, 1)):
-        #     if x[0].item() == 0:
-        #         print ("tag missing", tags[i])
         cls_out = torch.cat([pool(h, tag_mask.eq(0), type=pool_type), pool(h, subj_mask.eq(0), type=pool_type), pool(h, obj_mask.eq(0), type=pool_type)], 1)
         cls_out = self.dropout(cls_out)
         logits = self.classifier(cls_out)
@@ -118,7 +91,6 @@ def pool(h, mask, type='max'):
         return torch.max(h, 1)[0]
     elif type == 'avg':
         h = h.masked_fill(mask, 0)
-        # print ('size: ', (mask.size(1) - mask.float().sum(1)))
         return torch.nan_to_num(h.sum(1) / (mask.size(1) - mask.float().sum(1)))
     else:
         h = h.masked_fill(mask, 0)
