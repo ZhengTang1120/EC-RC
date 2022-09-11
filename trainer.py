@@ -77,7 +77,6 @@ class BERTtrainer(Trainer):
             {'params': [p for n, p in param_optimizer
                         if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
-        # parameters = [p for p in self.classifier.parameters() if p.requires_grad] + [p for p in self.encoder.parameters() if p.requires_grad]
         if opt['cuda']:
             with torch.cuda.device(self.opt['device']):
                 self.encoder.cuda()
@@ -113,7 +112,6 @@ class BERTtrainer(Trainer):
                 if n != -1 and len(tag_cands)!=0:
                     logits = self.classifier(h[i], torch.cat(n*[inputs[0][i].unsqueeze(0)], dim=0), tag_cands)
                     best = np.argmax(logits.data.cpu().numpy(), axis=0).tolist()[labels[i]]
-                    # loss += self.criterion2(tagging_output[i], tag_cands[best].unsqueeze(1).to(torch.float32))
                     loss += self.criterion(logits[best].unsqueeze(0), labels.unsqueeze(1)[i])
                 else:
                     print (n, tag_cands)

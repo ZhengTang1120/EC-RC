@@ -39,15 +39,6 @@ class BERTclassifier(nn.Module):
         subj_mask = torch.logical_and(words.unsqueeze(2).gt(4), words.unsqueeze(2).lt(9))
         obj_mask = torch.logical_and(words.unsqueeze(2).gt(0), words.unsqueeze(2).lt(5))
         tag_mask = tags.unsqueeze(2).eq(1)
-        for i, x in enumerate(torch.sum(subj_mask, 1)):
-            if x[0].item() == 0:
-                print ("subj missing", words[i])
-        for i, x in enumerate(torch.sum(obj_mask, 1)):
-            if x[0].item() == 0:
-                print ("obj missing", words[i])
-        for i, x in enumerate(torch.sum(tag_mask, 1)):
-            if x[0].item() == 0:
-                print ("tag missing", tags[i])
         cls_out = torch.cat([pool(h, tag_mask.eq(0), type=pool_type), pool(h, subj_mask.eq(0), type=pool_type), pool(h, obj_mask.eq(0), type=pool_type)], 1)
         cls_out = self.dropout(cls_out)
         logits = self.classifier(cls_out)
@@ -98,7 +89,6 @@ def pool(h, mask, type='max'):
         return torch.max(h, 1)[0]
     elif type == 'avg':
         h = h.masked_fill(mask, 0)
-        # print ('size: ', (mask.size(1) - mask.float().sum(1)))
         return torch.nan_to_num(h.sum(1) / (mask.size(1) - mask.float().sum(1)))
     else:
         h = h.masked_fill(mask, 0)
