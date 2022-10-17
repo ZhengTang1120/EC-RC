@@ -44,8 +44,9 @@ class DataLoader(object):
         
         self.id2label = dict([(v,k) for k,v in self.label2id.items()])
         self.labels = [self.id2label[d[-2]] for d in data]
-        self.words = [d[-1] for d in data]
+        self.words = [d[-1][0] for d in data]
         self.num_examples = len(data)
+        self.entity_validations = [d[-1][1] for d in data]
         
         # chunk into batches
         data = [data[i:i+batch_size] for i in range(0, len(data), batch_size)]
@@ -62,9 +63,10 @@ class DataLoader(object):
             words  = list()
             origin = list()
             if not self.do_eval:
-                _, tagged = self.tagging[c].split('\t')
+                rl, tagged = self.tagging[c].split('\t')
                 tagged = eval(tagged)
             else:
+                rl = "no_relation"
                 tagged = []
             tagging_mask = list()
 
@@ -98,7 +100,10 @@ class DataLoader(object):
                             tagging_mask.append(0)
             
             words = ['[CLS]'] + words + ['[SEP]']
-            relation = self.label2id[d['relation']]
+            if not self.do_eval:
+                relation = self.label2id[rl]
+            else:
+                relation = self.label2id[d['relation']]
             tagging_mask = [0]+tagging_mask+[0]
             tokens = self.tokenizer.convert_tokens_to_ids(words)
             if len(tokens) > self.opt['max_length']:
@@ -107,9 +112,9 @@ class DataLoader(object):
             mask = [1] * len(tokens)
             segment_ids = [0] * len(tokens)
             if self.do_eval:
-                processed += [(tokens, mask, segment_ids, tagging_mask, sum(tagging_mask)!=0, relation, origin)]
+                processed += [(tokens, mask, segment_ids, tagging_mask, sum(tagging_mask)!=0, relation, (origin, f"{d['subj_type']}:{d['obj_type']}"))]
             elif len([aa for aa in tokens if aa>0 and aa<20]) == 2:
-                processed += [(tokens, mask, segment_ids, tagging_mask, sum(tagging_mask)!=0, relation, origin)]
+                processed += [(tokens, mask, segment_ids, tagging_mask, sum(tagging_mask)!=0, relation, (origin, None))]
                 
         return processed
 

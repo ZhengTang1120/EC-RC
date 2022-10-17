@@ -15,6 +15,9 @@ from termcolor import colored
 
 import statistics
 
+import sys
+from utils import helper
+
 def argmax(l):
     return max(enumerate(l), key=lambda x: x[1])[0]
 
@@ -49,8 +52,8 @@ def rules_with_out_golds(candidates, origin, model_output):
             subj_type = 'PERSON'
         else:
             subj_type = 'ORGANIZATION'
-        if item['predicted_label'] != 'no_relation':# and subj_type == origin[i]['subj_type']:#== item['gold_label']:#
-            if len(item['predicted_tags']) != 0 and len(item['gold_tags']) == 0 and item['relation_confident']!=1:
+        if item['predicted_label'] != 'no_relation':
+            if len(item['predicted_tags']) != 0 and not item['from_prev']:
                 c += 1
                 subj = list(range(origin[i]['subj_start']+1, origin[i]['subj_end']+2))
                 obj = list(range(origin[i]['obj_start']+1, origin[i]['obj_end']+2))
@@ -59,10 +62,6 @@ def rules_with_out_golds(candidates, origin, model_output):
                     sp = []
                     op = []
                     trigger_head = triggers[argmax([g.degree[t] for t in triggers])]
-                    # subj_head = subj[argmax([g.degree[s] for s in subj])]
-                    # obj_head = obj[argmax([g.degree[o] for o in obj])]
-                    # sp = nx.shortest_paths(g, source=trigger_head, target=subj_head)
-                    # op = nx.shortest_paths(g, source=trigger_head, target=obj_head)
                     for t in triggers:
                         for s in subj:
                             temp1 = nx.shortest_path(g, t, s)
@@ -87,86 +86,16 @@ def rules_with_out_golds(candidates, origin, model_output):
                         else:
                             trigger += '(/.+/){,%d}'%(j-prev-1) + '"%s"'%tokens[j]
                         prev = j
-                    # print (trigger, [item['trigger_confident'][j] 
-                    #     for j, w in enumerate(origin[i]['token']) if j in item['predicted_tags'] and j+1 not in subj and j+1 not in obj])
-                    trigger_conf = statistics.mean([item['trigger_confident'][j] 
-                        for j, w in enumerate(origin[i]['token']) if j in item['predicted_tags'] and j+1 not in subj and j+1 not in obj])
-                    if trigger in confs[item['predicted_label']]:
-                        confs[item['predicted_label'].replace('/', '_slash_')][trigger].append((trigger_conf, item['relation_confident']))
-                    else:
-                        confs[item['predicted_label'].replace('/', '_slash_')][trigger] = [(trigger_conf, item['relation_confident'])]
-                    # xxxxx = (trigger, origin[i]['subj_type'], origin[i]['obj_type'])
-                    # if xxxxx not in tuples[item['predicted_label']]:
-                    #     tuples[item['predicted_label']].append(xxxxx)
                     l = [trigger, [postags[j] for j in triggers], [e[sp[j]][sp[j+1]] for j in range(len(sp)-1)], [e[op[j]][op[j+1]] for j in range(len(op)-1)]]
                     
                     if l not in candidates[item['predicted_label']] and len(sp)!=0 and len(op)!=0:
                         candidates[item['predicted_label']] += [l]
-                    elif len(triggers) > 3:
-                        print (triggers, trigger, item['predicted_label'])
-    return candidates, subjects, objects, confs
-
-def rules_with_corrects(candidates, origin, model_output):
-    # In this case, we have access to gold labels
-    assert(len(model_output)==len(origin))
-    subjects = defaultdict(set)
-    objects = defaultdict(set)
-    d = defaultdict(set)
-    
-    for i, item in enumerate(model_output):
-        g, e = build_graph(origin[i])
-        tokens = ['ROOT'] + origin[i]['token']
-        postags = ['ROOT'] + origin[i]['stanford_pos']
-        # if item['predicted_label'] != 'no_relation':
-        #     ts = origin[i]['token']
-        #     ts = [colored(w, "blue") if j in list(range(origin[i]['subj_start'], origin[i]['subj_end']+1)) else w for j, w in enumerate(ts)]
-        #     ts = [colored(w, "yellow") if j in list(range(origin[i]['obj_start'], origin[i]['obj_end']+1)) else w for j, w in enumerate(ts)]
-        #     ts = [colored(w, "red") if j in item['predicted_tags'] else w for j, w in enumerate(ts)]
-        #     print (' '.join(ts))
-        # continue
-        if item['predicted_label'] == item['gold_label']:
-            if len(item['predicted_tags']) != 0 and len(item['gold_tags']) == 0:
-                subj = list(range(origin[i]['subj_start']+1, origin[i]['subj_end']+2))
-                obj = list(range(origin[i]['obj_start']+1, origin[i]['obj_end']+2))
-                triggers = [j+1 for j, w in enumerate(origin[i]['token']) if j in item['predicted_tags'] and j+1 not in subj and j+1 not in obj]
-                if triggers:
-                    sp = []
-                    op = []
-                    trigger_head = triggers[argmax([g.degree[t] for t in triggers])]
-                    # subj_head = subj[argmax([g.degree[s] for s in subj])]
-                    # obj_head = obj[argmax([g.degree[o] for o in obj])]
-                    # sp = nx.shortest_paths(g, source=trigger_head, target=subj_head)
-                    # op = nx.shortest_paths(g, source=trigger_head, target=obj_head)
-                    for t in triggers:
-                        for s in subj:
-                            temp1 = nx.shortest_path(g, t, s)
-                            for o in obj:
-                                temp2 = nx.shortest_path(g, t, o)
-                                if len(temp1+temp2)<len(sp+op) or sp == []:
-                                    sp = temp1
-                                    op = temp2
-                                    trigger_head = t
-
-                    subjects[item['gold_label']].add(origin[i]['subj_type'])
-                    objects[item['gold_label']].add(origin[i]['obj_type']) 
-                    trigger = ''
-                    prev = -1
-                    for j in triggers:
-                        if prev == -1:
-                            trigger += '"%s"'%tokens[j]
-                        elif j - prev == 1:
-                            trigger += ' ' + '"%s"'%tokens[j]
-                        else:
-                            trigger += '(/.+/)*' + '"%s"'%tokens[j]
-                        prev = j
-                        
-                    l = [trigger, [postags[j] for j in triggers], [e[sp[j]][sp[j+1]] for j in range(len(sp)-1)], [e[op[j]][op[j+1]] for j in range(len(op)-1)]]
-                    if l not in candidates[item['gold_label']] and len(triggers)<=3 and len(sp)!=0 and len(op)!=0:
-                        candidates[item['gold_label']] += [l]
-
+                    # elif len(triggers) > 3:
+                    #     print (triggers, trigger, item['predicted_label'])
     return candidates, subjects, objects
 
-def save_rule_dict(candidates, subjects, objects, name, confs):
+
+def save_rule_dict(candidates, subjects, objects, name):
     res = defaultdict(dict)    
     output = dict()
     total = 0
@@ -179,9 +108,7 @@ def save_rule_dict(candidates, subjects, objects, name, confs):
             subj = c[2]
             obj = c[3]
             if len(subj)>0 and len(obj)>0:
-                tcs, rcs = zip(*(confs[label][trigger]))
-                conf = (statistics.mean(tcs), statistics.mean(rcs))
-                output[label][trigger].append({'subj':subj, 'obj':obj, 'confident':conf})
+                output[label][trigger].append({'subj':subj, 'obj':obj})
                 total += 1
     for label in output:
         label2 = label.replace('_slash_', '/')
@@ -195,7 +122,81 @@ def save_rule_dict(candidates, subjects, objects, name, confs):
 
 
     sod = defaultdict(dict)
-    with open('master.yml','w') as f:
+    helper.ensure_dir('src/main/resources/grammars_%s/'%sys.argv[1], verbose=True)
+    with open('src/main/resources/grammars_%s/master.yml'%sys.argv[1],'w') as f:
+        f.write('''
+taxonomy:
+  - SUBJ_Person
+  - SUBJ_Organization
+  - OBJ_Person
+  - OBJ_Organization
+  - OBJ_Date
+  - OBJ_Number
+  - OBJ_Title
+  - OBJ_Country
+  - OBJ_Location
+  - OBJ_City
+  - OBJ_Misc
+  - OBJ_State_or_province
+  - OBJ_Duration
+  - OBJ_Nationality
+  - OBJ_Cause_of_death
+  - OBJ_Criminal_charge
+  - OBJ_Religion
+  - OBJ_Url
+  - OBJ_Ideology
+  - Relation:
+      - per:title
+      - org:top_members/employees
+      - per:employee_of
+      - org:alternate_names
+      - org:country_of_headquarters
+      - per:countries_of_residence
+      - org:city_of_headquarters
+      - per:cities_of_residence
+      - per:age
+      - per:stateorprovinces_of_residence
+      - per:origin
+      - org:subsidiaries
+      - org:parents
+      - per:spouse
+      - org:stateorprovince_of_headquarters
+      - per:children
+      - per:other_family
+      - per:alternate_names
+      - org:members
+      - per:siblings
+      - per:schools_attended
+      - per:parents
+      - per:date_of_death
+      - org:member_of
+      - org:founded_by
+      - org:website
+      - per:cause_of_death
+      - org:political/religious_affiliation
+      - org:founded
+      - per:city_of_death
+      - org:shareholders
+      - org:number_of_employees/members
+      - per:date_of_birth
+      - per:city_of_birth
+      - per:charges
+      - per:stateorprovince_of_death
+      - per:religion
+      - per:stateorprovince_of_birth
+      - per:country_of_birth
+      - org:dissolved
+      - per:country_of_death
+
+rules:
+  - import: grammars/entities.yml
+    vars:
+      # We need our entities before we can match events
+      # Here we make use of the ${rulepriority} variable
+      # used in the entities.yml rules
+      rulepriority: "1"
+
+            ''')
         for label in subjects:
             count = 0
             for subj in subjects[label]:
@@ -211,20 +212,21 @@ def save_rule_dict(candidates, subjects, objects, name, confs):
       subject_type: SUBJ_%s
       object_type: OBJ_%s
       count: "%d"
+
   '''%(name, label.replace('/', '_slash_')+'_unit', label, subj, obj, count))
                     count += 1
     print (json.dumps(sod))
 
 if __name__ == "__main__":
 
-    model_output = json.load(open('../tacred_tagging/output_bs0ndr_train_best_model_7.json'))
-    origin = json.load(open('/home/zheng/Documents/research/tacred_odin/src/main/resources/data/train.json'))
+    model_output = json.load(open('output_%s.json'%sys.argv[1]))
+    origin = json.load(open('src/main/resources/data/train.json'))
 
     candidates = defaultdict(list)
 
-    candidates, subjects, objects, confs = rules_with_out_golds(candidates, origin, model_output)
+    candidates, subjects, objects = rules_with_out_golds(candidates, origin, model_output)
 
-    save_rule_dict(candidates, subjects, objects, "exp1r", confs)
+    save_rule_dict(candidates, subjects, objects, sys.argv[1])
 
 
 

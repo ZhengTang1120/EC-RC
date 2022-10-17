@@ -66,7 +66,7 @@ object shell extends App {
 
   val t1 = System.nanoTime
   val doc = new Document(sentences.toArray)
-  val source = io.Source.fromURL(getClass.getResource("/grammars/master.yml"))
+  val source = io.Source.fromURL(getClass.getResource(args(1)))
   val rules = source.mkString
   source.close()
   val extractor = ExtractorEngine(rules)

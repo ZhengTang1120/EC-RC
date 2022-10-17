@@ -70,12 +70,12 @@ elif args.cuda:
 
 tokenizer = BertTokenizer.from_pretrained('spanbert-large-cased')
 
-train_batch = DataLoader(opt['data_dir'] + '/train.json', opt['batch_size'], opt, tokenizer, False, opt['data_dir'] + '/tagging_train.txt')
+train_batch = DataLoader(opt['data_dir'] + '/train.json', opt['batch_size'], opt, tokenizer, False, opt['data_dir'] + '/tagging_train_%s.txt'%opt['id'])
 train_num_example = train_batch.num_examples
 train_batch = list(train_batch)
-dev_batch = DataLoader(opt['data_dir'] + '/dev.json', opt['batch_size'], opt, tokenizer)
+dev_batch = DataLoader(opt['data_dir'] + '/dev_1pc.json', opt['batch_size'], opt, tokenizer)
 
-model_id = opt['id'] if len(opt['id']) > 1 else '0' + opt['id']
+model_id = opt['id']
 model_save_dir = opt['save_dir'] + '/' + model_id
 opt['model_save_dir'] = model_save_dir
 helper.ensure_dir(model_save_dir, verbose=True)
@@ -113,6 +113,7 @@ eval_step = max(1, len(train_batch) // args.eval_per_epoch)
 dev_score_history = []
 # start training
 durations = list()
+c = 0
 for epoch in range(1, opt['num_epoch']+1):
     
     train_loss = 0
@@ -127,15 +128,15 @@ for epoch in range(1, opt['num_epoch']+1):
         train_loss += loss
         if global_step % opt['log_step'] == 0:
             duration = time.time() - start_time
-            print(format_str.format(datetime.now(), global_step, max_steps, epoch,\
-                    opt['num_epoch'], loss, duration, current_lr))
+            # print(format_str.format(datetime.now(), global_step, max_steps, epoch,\
+            #         opt['num_epoch'], loss, duration, current_lr))
         if (i + 1) % eval_step == 0:
             # eval on dev
-            print("Evaluating on dev set...")
+            # print("Evaluating on dev set...")
             predictions = []
             dev_loss = 0
             for _, batch in enumerate(dev_batch):
-                preds, tags, dloss = trainer.predict(batch, id2label, tokenizer)
+                preds, tags, dloss, _ = trainer.predict(batch, id2label, tokenizer)
                 predictions += preds
                 dev_loss += dloss
             predictions = [id2label[p] for p in predictions]
@@ -143,19 +144,25 @@ for epoch in range(1, opt['num_epoch']+1):
             dev_loss = dev_loss / dev_batch.num_examples * opt['batch_size']
 
             dev_p, dev_r, dev_f1, bi_acc = scorer.score(dev_batch.gold(), predictions)
-            print("epoch {}: train_loss = {:.6f}, dev_loss = {:.6f}, dev_f1 = {:.4f}, binary_accuracy = {:.4f}".format(epoch,\
-                train_loss, dev_loss, dev_f1, bi_acc))
+            # print("epoch {}: train_loss = {:.6f}, dev_loss = {:.6f}, dev_f1 = {:.4f}, binary_accuracy = {:.4f}".format(epoch,\
+                # train_loss, dev_loss, dev_f1, bi_acc))
             dev_score = dev_f1
             file_logger.log("{}\t{:.6f}\t{:.6f}\t{:.4f}\t{:.4f}".format(epoch, train_loss, dev_loss, dev_score, max([dev_score] + dev_score_history)))
 
             # save
             if dev_score_history == [] or dev_score > max(dev_score_history):
+                c = 0
                 model_file = model_save_dir + '/best_model.pt'
                 trainer.save(model_file)
-                print("new best model saved.")
+                # print("new best model saved.")
                 file_logger.log("new best model saved at epoch {}: {:.2f}\t{:.2f}\t{:.2f}"\
                     .format(epoch, dev_p*100, dev_r*100, dev_score*100))
+            else:
+                if epoch > args.burnin and c > args.eval_per_epoch:
+                    print("Early stopped, training ended with {} epochs.".format(epoch))
+                    exit()
+                c += 1
 
             dev_score_history += [dev_score]
-            print("")
+            # print("")
 print("Training ended with {} epochs.".format(epoch))

@@ -105,16 +105,18 @@ class BERTtrainer(Trainer):
         for i, f in enumerate(has_tag):
             if f:
                 loss += self.criterion2(tagging_output[i], inputs[3][i].unsqueeze(1).to(torch.float32))
-                logits = self.classifier(h[i], inputs[0][i].unsqueeze(0), inputs[3][i].unsqueeze(0))
+                logits = self.classifier(h[i], inputs[0][i].unsqueeze(0), inputs[3][i].unsqueeze(0).eq(1))
                 loss += self.criterion(logits, labels.unsqueeze(1)[i])
             elif labels[i] != 0 and epoch > self.opt['burnin']:
-                tag_cands, n = self.tagger.generate_cand_tags(tagging_output[i], self.opt['device'])
-                if n != -1 and len(tag_cands)!=0:
-                    logits = self.classifier(h[i], torch.cat(n*[inputs[0][i].unsqueeze(0)], dim=0), tag_cands)
-                    best = np.argmax(logits.data.cpu().numpy(), axis=0).tolist()[labels[i]]
-                    loss += self.criterion(logits[best].unsqueeze(0), labels.unsqueeze(1)[i])
-                else:
-                    pass#print (n, tag_cands)
+                logits = self.classifier(h[i], inputs[0][i].unsqueeze(0), tagging_output[i].squeeze(1).unsqueeze(0), True)
+                loss += self.criterion(logits, labels.unsqueeze(1)[i])
+                # tag_cands, n = self.tagger.generate_cand_tags(tagging_output[i], self.opt['device'])
+                # if n != -1 and len(tag_cands)!=0:
+                #     logits = self.classifier(h[i], torch.cat(n*[inputs[0][i].unsqueeze(0)], dim=0), tag_cands)
+                #     best = np.argmax(logits.data.cpu().numpy(), axis=0).tolist()[labels[i]]
+                #     loss += self.criterion(logits[best].unsqueeze(0), labels.unsqueeze(1)[i])
+                # else:
+                #     pass#print (n, tag_cands)
 
         loss_val = loss.item()
 
@@ -137,13 +139,14 @@ class BERTtrainer(Trainer):
             tagging_mask = torch.round(tagging_output).squeeze(2)
             tagging_max = np.argmax(tagging_output.squeeze(2).data.cpu().numpy(), axis=1)
             tagging = torch.round(tagging_output).squeeze(2)
-            logits = self.classifier(h, inputs[0], tagging_mask)
+            logits = self.classifier(h, inputs[0], tagging_mask.eq(1))
             probs = F.softmax(logits, 1) * torch.round(b_out)
         loss = self.criterion2(b_out, (~(labels.eq(0))).to(torch.float32).unsqueeze(1)) + self.criterion(logits, labels).item()
         for i, f in enumerate(has_tag):
             if f:
                 loss += self.criterion2(tagging_output[i], inputs[3][i].unsqueeze(1).to(torch.float32))
         predictions = np.argmax(probs.data.cpu().numpy(), axis=1).tolist()
+        pred_confs = np.amax(probs.data.cpu().numpy(), axis=1).tolist()
         tags = []
         for i, p in enumerate(predictions):
             # if p != 0:
@@ -151,4 +154,4 @@ class BERTtrainer(Trainer):
             if sum(t) == 0:
                 t[tagging_max[i]] = 1
             tags += [t]
-        return predictions, tags, loss
+        return predictions, tags, loss, pred_confs

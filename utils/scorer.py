@@ -93,22 +93,49 @@ def score(key, prediction, verbose=False):
         f1_micro = 2.0 * prec_micro * recall_micro / (prec_micro + recall_micro)
 
     binary_acc = binary_correct / len(key)
-    print( "Precision (micro): {:.3%}".format(prec_micro) )
-    print( "   Recall (micro): {:.3%}".format(recall_micro) )
-    print( "       F1 (micro): {:.3%}".format(f1_micro) )
+    if verbose:
+        print( "Precision (micro): {:.3%}".format(prec_micro) )
+        print( "   Recall (micro): {:.3%}".format(recall_micro) )
+        print( "       F1 (micro): {:.3%}".format(f1_micro) )
     return prec_micro, recall_micro, f1_micro, binary_acc
 
-if __name__ == "__main__":
-    # Parse the arguments from stdin
-    args = parse_arguments()
-    key = [str(line).rstrip('\n') for line in open(str(args.gold_file))]
-    prediction = [str(line).rstrip('\n') for line in open(str(args.pred_file))]
+def score_per_label(key, prediction, label):
+    correct_by_relation = Counter()
+    guessed_by_relation = Counter()
+    gold_by_relation    = Counter()
 
-    # Check that the lengths match
-    if len(prediction) != len(key):
-        print("Gold and prediction file must have same number of elements: %d in gold vs %d in prediction" % (len(key), len(prediction)))
-        exit(1)
-    
-    # Score the predictions
-    score(key, prediction, verbose=True)
-
+    # Loop over the data to compute a score
+    for row in range(len(key)):
+        gold = key[row]
+        guess = prediction[row]
+         
+        if gold == NO_RELATION and guess == NO_RELATION:
+            pass
+        elif gold == NO_RELATION and guess != NO_RELATION:
+            guessed_by_relation[guess] += 1
+        elif gold != NO_RELATION and guess == NO_RELATION:
+            gold_by_relation[gold] += 1
+        elif gold != NO_RELATION and guess != NO_RELATION:
+            guessed_by_relation[guess] += 1
+            gold_by_relation[gold] += 1
+            if gold == guess:
+                correct_by_relation[guess] += 1
+    relations = [label]
+    longest_relation = 0
+    for relation in sorted(relations):
+        longest_relation = max(len(relation), longest_relation)
+    for relation in sorted(relations):
+        # (compute the score)
+        correct = correct_by_relation[relation]
+        guessed = guessed_by_relation[relation]
+        gold    = gold_by_relation[relation]
+        prec = 0.0
+        if guessed > 0:
+            prec = float(correct) / float(guessed)
+        recall = 0.0
+        if gold > 0:
+            recall = float(correct) / float(gold)
+        f1 = 0.0
+        if prec + recall > 0:
+            f1 = 2.0 * prec * recall / (prec + recall)
+        return prec, recall, f1
