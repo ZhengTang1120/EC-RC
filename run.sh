@@ -2,12 +2,9 @@
 
 for iter in {0..5}
 do
-    if [ $iter -ne 0 ]
-    then
     # train
     python train.py --lr 1e-5 --pooling avg --batch_size 32 --num_epoch 20 --seed 43 --id $iter --device 0 --warmup_prop 0.3 --data_dir dataset/tacred --info "TACRED EC+RC" 
     # generate model output
-    fi
     python eval.py saved_models/$iter --device 0 --dataset train
     # generate rules from training
     python collect_rules.py $iter
