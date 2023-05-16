@@ -24,7 +24,7 @@ def from_model(model_output, output):
     with open(output, 'w') as f:
         for i, item in enumerate(model_output):
             if item["from_prev"]:
-                f.write (item['predicted_label']+"\t"+str(item["gold_tags"]))
+                f.write (item['prev_label']+"\t"+str(item["gold_tags"]))
                 f.write('\n')
             elif item["predicted_label"]!="no_relation":
                 f.write (item['predicted_label']+"\t"+str(item["predicted_tags"]))
@@ -67,7 +67,7 @@ def from_rule(model_output, rule_output, output, kept):
             predicted_tags = t.get(predicted_label, [])
 
             if item["from_prev"]:
-                f.write (item['predicted_label']+"\t"+str(item["gold_tags"]))
+                f.write (item['prev_label']+"\t"+str(item["gold_tags"]))
                 f.write('\n')
             elif predicted_label!="no_relation":
                 f.write (predicted_label+"\t"+str(predicted_tags))
